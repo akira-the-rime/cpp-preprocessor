@@ -10,8 +10,6 @@
 using namespace std;
 using filesystem::path;
 
-bool MESSAGE = true;
-
 path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
@@ -64,6 +62,8 @@ bool Process(const path& out_file, const vector<path>& include_directories, cons
 // напишите эту функцию
 bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
 
+
+    static bool MESSAGE = true;
     ifstream fin(in_file, ios::in);
 
     if (!fin) {
