@@ -58,11 +58,7 @@ bool Process(const path& out_file, const vector<path>& include_directories, cons
     path to_source = current_path;
     MakePath(match, to_source);
     bool success = Preprocess(to_source, out_file, include_directories);
-    if (!success) {
-        success = SearchIncludeDirectories(to_source, out_file, include_directories);
-        return success;
-    }
-    return true;
+    return success;
 }
 
 // напишите эту функцию
@@ -71,7 +67,8 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
     ifstream fin(in_file, ios::in);
 
     if (!fin) {
-        return false;
+        bool success = SearchIncludeDirectories(in_file, out_file, include_directories);
+        return success;
     }
 
     int lines = 1;
