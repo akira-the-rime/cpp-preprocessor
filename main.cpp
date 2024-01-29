@@ -62,7 +62,6 @@ bool Process(const path& out_file, const vector<path>& include_directories, cons
 // напишите эту функцию
 bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
 
-
     static bool MESSAGE = true;
     ifstream fin(in_file, ios::in);
 
