@@ -7,57 +7,60 @@
 #include <string>
 #include <vector>
 
-// #include "log.h"
-
 using namespace std;
 using filesystem::path;
 
 bool MESSAGE = true;
-bool CHECKING_FIRST_FILE = true;
 
 path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-string ParseString(string& to_source) {
+void MakePath(const string& match, path& to_source) {
     string temp;
-    for (size_t i = 0; i < to_source.size(); ++i) {
-        if (to_source[i] == ' ' || to_source[i] == '\t') {
-            continue;
-        }
-        temp += to_source[i];
-    }
-    return temp;
-}
-
-void MakePath(string& include, path& to_source) {
-    string temp;
-    for (size_t i = 0; i < include.size(); ++i) {
-        if (include[i] == '/') {
+    for (size_t i = 0; i < match.size(); ++i) {
+        if (match[i] == '/') {
             to_source = to_source / temp;
             temp.clear();
             continue;
         }
-        temp += include[i];
+        temp += match[i];
     }
     to_source = to_source / temp;
 }
 
 bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories);
 
-bool Processing(const path& out_file, const vector<path>& include_directories, string& include, const path& current_path, bool angle_brackets = false) {
-    include = ParseString(include).substr(9);
-    include = { include.begin(), include.end() - 1 };
-    path to_source = current_path;
-    if (angle_brackets) {
-        while (to_source.filename() != "sources"_p) {
-            to_source = to_source.parent_path();
+bool SearchIncludeDirectories(const path& in_file, const path& out_file, const vector<path>& include_directories) {
+    for (auto it = include_directories.begin(); it != include_directories.end(); ++it) {
+        vector<path> new_directories;
+        if (filesystem::exists(*it)) {
+            for (const auto& gotten_path : filesystem::directory_iterator(*it)) {
+                if (gotten_path.status().type() == filesystem::file_type::directory) {
+                    new_directories.push_back(gotten_path.path());
+                }
+                else if (gotten_path.path().filename() == in_file.filename()) {
+                    Preprocess(gotten_path.path(), out_file, include_directories);
+                    return true;
+                }
+            }
+            bool found = SearchIncludeDirectories(in_file, out_file, new_directories);
+            if (found) {
+                return true;
+            }
+            new_directories.clear();
         }
     }
-    MakePath(include, to_source);
+    return false;
+}
+
+bool Process(const path& out_file, const vector<path>& include_directories, const string& match, const path& current_path) {
+    path to_source = current_path;
+    MakePath(match, to_source);
     bool success = Preprocess(to_source, out_file, include_directories);
     if (!success) {
-        return false;
+        success = SearchIncludeDirectories(to_source, out_file, include_directories);
+        return success;
     }
     return true;
 }
@@ -67,33 +70,10 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
 
     ifstream fin(in_file, ios::in);
 
-    if (!filesystem::exists(in_file)) {
-        if (CHECKING_FIRST_FILE) {
-            return false;
-        }
-        for (auto it = include_directories.begin(); it != include_directories.end(); ++it) {
-            vector<path> new_directories;
-            if (filesystem::exists(*it)) {
-                for (const auto& gotten_path : filesystem::directory_iterator(*it)) {
-                    if (gotten_path.status().type() == filesystem::file_type::directory) {
-                        new_directories.push_back(gotten_path.path());
-                    }
-                    else if (gotten_path.path().filename() == in_file.filename()) {
-                        Preprocess(gotten_path.path(), out_file, include_directories);
-                        return true;
-                    }
-                }
-                bool found = Preprocess(in_file, out_file, new_directories);
-                if (found) {
-                    return true;
-                }
-                new_directories.clear();
-            }
-        }
+    if (!fin) {
         return false;
     }
 
-    CHECKING_FIRST_FILE = false;
     int lines = 1;
     ofstream fout(out_file, ios::out | ios::app);
     string include;
@@ -110,24 +90,21 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
             return true;
         }
         bool success = true;
-        if (regex_match(include, match_quotes)) {
-            success = Processing(out_file, include_directories, include, current_path);
-        }
-        else if (regex_match(include, match_angle_brackets)) {
-            success = Processing(out_file, include_directories, include, current_path, true);
+        std::smatch m;
+        if (regex_match(include, m, match_quotes) || regex_match(include, m, match_angle_brackets)) {
+            success = Process(out_file, include_directories, m[1].str(), current_path);
         }
         else {
             fout << include << endl;
             include.clear();
         }
         if (!success && MESSAGE) {
-            cout << "unknown include file " << include << " at file " << in_file.string() << " at line " << lines << endl;
+            cout << "unknown include file " << m[1].str() << " at file " << in_file.string() << " at line " << lines << endl;
             MESSAGE = !MESSAGE;
             return false;
         }
         ++lines;
     }
-
     return true;
 }
 
@@ -186,7 +163,6 @@ void Test() {
     }
 
     {
-        // LOG("Preprocessor"s);
         assert((!Preprocess("sources"_p / "a.cpp"_p, "sources"_p / "a.in"_p,
             { "sources"_p / "include1"_p,"sources"_p / "include2"_p })));
     }
