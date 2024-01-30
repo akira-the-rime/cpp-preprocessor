@@ -33,41 +33,38 @@ bool SearchIncludeDirectories(const path& in_file, const path& out_file, const v
     for (auto it = include_directories.begin(); it != include_directories.end(); ++it) {
         vector<path> new_directories;
         if (filesystem::exists(*it)) {
-            for (const auto& gotten_path : filesystem::directory_iterator(*it)) {
-                if (gotten_path.status().type() == filesystem::file_type::directory) {
-                    new_directories.push_back(gotten_path.path());
+            if (!filesystem::exists(path(*it) / in_file.filename())) {
+                for (const auto& gotten_path : filesystem::directory_iterator(*it)) {
+                    if (gotten_path.status().type() == filesystem::file_type::directory) {
+                        new_directories.push_back(gotten_path.path());
+                    }
                 }
-                else if (gotten_path.path().filename() == in_file.filename()) {
-                    Preprocess(gotten_path.path(), out_file, include_directories);
+                bool found = SearchIncludeDirectories(in_file, out_file, new_directories);
+                if (found) {
                     return true;
                 }
+                new_directories.clear();
             }
-            bool found = SearchIncludeDirectories(in_file, out_file, new_directories);
-            if (found) {
+            else {
+                Preprocess(path(*it) / path(in_file.filename()), out_file, include_directories);
                 return true;
             }
-            new_directories.clear();
         }
     }
     return false;
 }
 
-bool Process(const path& out_file, const vector<path>& include_directories, const string& match, const path& current_path) {
-    path to_source = current_path;
-    MakePath(match, to_source);
-    bool success = Preprocess(to_source, out_file, include_directories);
-    return success;
+bool Output(const string &include, const string &file, const int &lines) {
+    cout << "unknown include file " << include << " at file " << file << " at line " << lines << endl;
+    return false;
 }
 
-// напишите эту функцию
 bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
 
-    static bool MESSAGE = true;
     ifstream fin(in_file, ios::in);
 
     if (!fin) {
-        bool success = SearchIncludeDirectories(in_file, out_file, include_directories);
-        return success;
+        return false;
     }
 
     int lines = 1;
@@ -87,17 +84,28 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
         }
         bool success = true;
         std::smatch m;
-        if (regex_match(include, m, match_quotes) || regex_match(include, m, match_angle_brackets)) {
-            success = Process(out_file, include_directories, m[1].str(), current_path);
+        if (regex_match(include, m, match_quotes)) {
+            path to_source = current_path;
+            MakePath(m[1].str(), to_source);
+            success = Preprocess(to_source, out_file, include_directories);
+            if (!success) {
+                success = SearchIncludeDirectories(to_source, out_file, include_directories);
+                if (!success) {
+                    return Output(m[1].str(), in_file.string(), lines);
+                }
+            }
+        }
+        else if (regex_match(include, m, match_angle_brackets)) {
+            path to_source = current_path;
+            MakePath(m[1].str(), to_source);
+            success = SearchIncludeDirectories(to_source, out_file, include_directories);
+            if (!success) {
+                return Output(m[1].str(), in_file.string(), lines);
+            }
         }
         else {
             fout << include << endl;
             include.clear();
-        }
-        if (!success && MESSAGE) {
-            cout << "unknown include file " << m[1].str() << " at file " << in_file.string() << " at line " << lines << endl;
-            MESSAGE = !MESSAGE;
-            return false;
         }
         ++lines;
     }
