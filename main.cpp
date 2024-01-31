@@ -10,11 +10,11 @@
 using namespace std;
 using filesystem::path;
 
-path operator""_p(const char* data, std::size_t sz) {
+path operator""_p(const char *data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-void MakePath(const string& match, path& to_source) {
+void MakePath(const string &match, path &to_source) {
     string temp;
     for (size_t i = 0; i < match.size(); ++i) {
         if (match[i] == '/') {
@@ -27,26 +27,14 @@ void MakePath(const string& match, path& to_source) {
     to_source = to_source / temp;
 }
 
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories);
+bool Preprocess(const path &in_file, const path &out_file, const vector<path> &include_directories, bool file_is_opened = false);
 
-bool SearchIncludeDirectories(const path& in_file, const path& out_file, const vector<path>& include_directories) {
+bool SearchIncludeDirectories(const path &in_file, const path &out_file, const vector<path> &include_directories) {
     for (auto it = include_directories.begin(); it != include_directories.end(); ++it) {
         vector<path> new_directories;
         if (filesystem::exists(*it)) {
-            if (!filesystem::exists(path(*it) / in_file.filename())) {
-                for (const auto& gotten_path : filesystem::directory_iterator(*it)) {
-                    if (gotten_path.status().type() == filesystem::file_type::directory) {
-                        new_directories.push_back(gotten_path.path());
-                    }
-                }
-                bool found = SearchIncludeDirectories(in_file, out_file, new_directories);
-                if (found) {
-                    return true;
-                }
-                new_directories.clear();
-            }
-            else {
-                Preprocess(path(*it) / path(in_file.filename()), out_file, include_directories);
+            if (filesystem::exists(filesystem::absolute(*it / in_file))) {
+                Preprocess(*it / in_file, out_file, include_directories, true);
                 return true;
             }
         }
@@ -59,7 +47,8 @@ bool Output(const string &include, const string &file, const int &lines) {
     return false;
 }
 
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
+// напишите эту функцию
+bool Preprocess(const path &in_file, const path &out_file, const vector<path> &include_directories, bool file_is_opened) {
 
     ifstream fin(in_file, ios::in);
 
@@ -67,38 +56,42 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
         return false;
     }
 
+    ofstream fout;
+    if (!file_is_opened) {
+        fout.open(out_file, ios::out | ios::trunc);
+    }
+    else {
+        fout.open(out_file, ios::out | ios::app);
+    }
+
     int lines = 1;
-    ofstream fout(out_file, ios::out | ios::app);
     string include;
-    const path current_path = in_file.parent_path();
     const regex match_quotes(R"/(\s*#\s*include\s*"([^"]*)"\s*)/");
     const regex match_angle_brackets(R"/(\s*#\s*include\s*<([^>]*)>\s*)/");
 
-    while (!fin.eof()) {
-        getline(fin, include);
-        if (fin.eof()) {
-            if (!include.empty()) {
-                fout << include << endl;
-            }
+    while (getline(fin, include)) {
+        if (!fin) {
             return true;
         }
         bool success = true;
         std::smatch m;
         if (regex_match(include, m, match_quotes)) {
-            path to_source = current_path;
-            MakePath(m[1].str(), to_source);
-            success = Preprocess(to_source, out_file, include_directories);
+            path quotes_path = in_file.parent_path();
+            MakePath(m[1].str(), quotes_path);
+            success = Preprocess(quotes_path, out_file, include_directories, true);
             if (!success) {
-                success = SearchIncludeDirectories(to_source, out_file, include_directories);
+                quotes_path.clear();
+                MakePath(m[1].str(), quotes_path);
+                success = SearchIncludeDirectories(quotes_path, out_file, include_directories);
                 if (!success) {
                     return Output(m[1].str(), in_file.string(), lines);
                 }
             }
         }
         else if (regex_match(include, m, match_angle_brackets)) {
-            path to_source = current_path;
-            MakePath(m[1].str(), to_source);
-            success = SearchIncludeDirectories(to_source, out_file, include_directories);
+            path angle_path;
+            MakePath(m[1].str(), angle_path);
+            success = SearchIncludeDirectories(angle_path, out_file, include_directories);
             if (!success) {
                 return Output(m[1].str(), in_file.string(), lines);
             }
@@ -106,6 +99,11 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
         else {
             fout << include << endl;
             include.clear();
+        }
+        if (!file_is_opened) {
+            fout.close();
+            fout.open(out_file, ios::out | ios::app);
+            file_is_opened = !file_is_opened;
         }
         ++lines;
     }
