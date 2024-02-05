@@ -47,7 +47,6 @@ bool Output(const string &include, const string &file, const int &lines) {
     return false;
 }
 
-// напишите эту функцию
 bool Preprocess(const path &in_file, const path &out_file, const vector<path> &include_directories, bool file_is_opened) {
 
     ifstream fin(in_file, ios::in);
@@ -113,7 +112,6 @@ bool Preprocess(const path &in_file, const path &out_file, const vector<path> &i
 string GetFileContents(string file) {
     ifstream stream(file);
 
-    // конструируем string по двум итераторам
     return { (istreambuf_iterator<char>(stream)), istreambuf_iterator<char>() };
 }
 
