@@ -1,7 +1,7 @@
 ENG:
 Preprocessor.
 An improvised preprocessor that inserts file contents in place of #include-directories.
-The program requires the C++20 language standard to run. Examples of usage can be found in the main() function.
+The program requires the C++17 language standard to run. Examples of usage can be found in the main() function.
 
 RU:
 Препроцессор.
